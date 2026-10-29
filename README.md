@@ -7,16 +7,10 @@ from tensorflow.keras.layers import SimpleRNN, LSTM, GRU, Dense
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error
 
-# -------------------------------------------------------------------
-# 1. Load the dataset
-# -------------------------------------------------------------------
-# keras.utils.get_file downloads and caches the file (~/.keras/datasets/),
-# so this only happens once.
 DATA_URL = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/airline-passengers.csv"
 csv_path = get_file("airline-passengers.csv", origin=DATA_URL)
 
 df = pd.read_csv(csv_path)
-# The CSV has columns: Month, Passengers
 series = df.iloc[:, 1].values.astype("float32").reshape(-1, 1)
 
 print("Dataset shape:", series.shape)
@@ -31,13 +25,10 @@ plt.tight_layout()
 plt.savefig("raw_series.png")
 plt.close()
 
-# -------------------------------------------------------------------
-# 2. Preprocess: scale to [0, 1] and build sliding-window sequences
-# -------------------------------------------------------------------
 scaler = MinMaxScaler(feature_range=(0, 1))
 scaled = scaler.fit_transform(series)
 
-LOOK_BACK = 12  # use the previous 12 months to predict the next month
+LOOK_BACK = 12
 
 
 def create_dataset(data, look_back=1):
@@ -50,20 +41,14 @@ def create_dataset(data, look_back=1):
 
 X, y = create_dataset(scaled, LOOK_BACK)
 
-# Train/test split (chronological, no shuffling for time series)
 split = int(len(X) * 0.8)
 X_train, X_test = X[:split], X[split:]
 y_train, y_test = y[:split], y[split:]
 
-# Reshape to [samples, timesteps, features] as required by RNN/LSTM layers
 X_train = X_train.reshape((X_train.shape[0], LOOK_BACK, 1))
 X_test = X_test.reshape((X_test.shape[0], LOOK_BACK, 1))
 
 print("Train shape:", X_train.shape, "Test shape:", X_test.shape)
-
-# -------------------------------------------------------------------
-# 3. Helper to train a model and report results
-# -------------------------------------------------------------------
 
 
 def train_and_evaluate(model, name, epochs=100):
@@ -77,7 +62,6 @@ def train_and_evaluate(model, name, epochs=100):
     train_pred = model.predict(X_train, verbose=0)
     test_pred = model.predict(X_test, verbose=0)
 
-    # Invert scaling to get back to real passenger numbers
     train_pred_inv = scaler.inverse_transform(train_pred)
     y_train_inv = scaler.inverse_transform(y_train.reshape(-1, 1))
     test_pred_inv = scaler.inverse_transform(test_pred)
@@ -101,36 +85,25 @@ def train_and_evaluate(model, name, epochs=100):
     return test_pred_inv, y_test_inv, test_rmse
 
 
-# -------------------------------------------------------------------
-# 4. Model A: Simple RNN
-# -------------------------------------------------------------------
 rnn_model = Sequential([
     SimpleRNN(50, activation="tanh", input_shape=(LOOK_BACK, 1)),
     Dense(1)
 ])
 rnn_pred, y_test_inv, rnn_rmse = train_and_evaluate(rnn_model, "SimpleRNN")
 
-# -------------------------------------------------------------------
-# 5. Model B: LSTM
-# -------------------------------------------------------------------
 lstm_model = Sequential([
     LSTM(50, activation="tanh", input_shape=(LOOK_BACK, 1)),
     Dense(1)
 ])
 lstm_pred, _, lstm_rmse = train_and_evaluate(lstm_model, "LSTM")
 
-# -------------------------------------------------------------------
-# 6. Model C: GRU (Gated Recurrent Unit)
-# -------------------------------------------------------------------
 gru_model = Sequential([
     GRU(50, activation="tanh", input_shape=(LOOK_BACK, 1)),
     Dense(1)
 ])
 gru_pred, _, gru_rmse = train_and_evaluate(gru_model, "GRU")
 
-# -------------------------------------------------------------------
-# 7. Compare predictions on the test set
-# -------------------------------------------------------------------
+
 plt.figure(figsize=(10, 5))
 plt.plot(y_test_inv, label="Actual", linewidth=2)
 plt.plot(rnn_pred, label=f"SimpleRNN (RMSE={rnn_rmse:.1f})")
